@@ -9,7 +9,7 @@ import tempretures from "../data/tempretures.json";
 import bases from "../data/bases.json";
 import syrups from "../data/syrups.json";
 import creamers from "../data/creamers.json";
-import db from "../firebase.ts";
+import { db } from "../firebase"
 import {
   collection,
   getDocs,
@@ -145,7 +145,75 @@ export const useBeverageStore = defineStore("BeverageStore", {
         this.currentSyrup
       );
     },
-    makeBeverage() {},
-    setUser(user: User | null) {},
-  },
+    async makeBeverage() {
+
+    if (!this.user) {
+      return "You must sign in to make a beverage.";
+    }
+
+    if (!this.currentName.trim() ||!this.currentBase || !this.currentSyrup || !this.currentCreamer) 
+    {
+      return "You must enter a beverage name, base, syrup, and creamer to make a beverage.";
+    }
+
+  const db_ref = doc(collection(db, "beverages"));
+  const drink: BeverageType = {
+    id: db_ref.id,
+    name: this.currentName,
+    temp: this.currentTemp,
+    base: this.currentBase,
+    syrup: this.currentSyrup,
+    creamer: this.currentCreamer,
+    userId: this.user.uid
+  };
+
+  try {
+    await setDoc(db_ref, drink);
+
+    this.beverages.push(drink);
+    this.currentBeverage = drink;
+
+    return `Beverage "${this.currentName}" made successfully!`;
+  } 
+  catch (error) {
+    console.error("Error making beverage:", error);
+    return "There was an issue creating your beverage.";
+  }
+}, 
+    async setUser(user: User | null) 
+    {
+      console.log("Adding User: ", user?.uid || "null");
+      this.user = user;
+      if (this.snapshotUnsubscribe)
+        {
+          this.snapshotUnsubscribe();
+          this.snapshotUnsubscribe = null
+        }
+      if (!user)
+        {
+          this.beverages = [];
+          this.currentBeverage = null;
+          return;
+        }
+      const drink_ref = collection(db, "beverages");
+      const db_query = query(drink_ref, where("userId", "==", user.uid))
+
+      this.snapshotUnsubscribe = onSnapshot(db_query, (qs: QuerySnapshot) => {
+    this.beverages = qs.docs.map((d) => ({
+      ...(d.data() as BeverageType),
+      id: d.id,
+    }));
+
+    if (this.beverages.length < 1)
+      {
+        this.currentBeverage = null;
+      }
+  else
+      {
+        this.currentBeverage = this.beverages [0];
+        this.showBeverage();
+      }
+      console.log("Beverages:", this.beverages);
 });
+    }
+}})
